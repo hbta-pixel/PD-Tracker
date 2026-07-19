@@ -56,12 +56,14 @@
       <p class="hint">Are you setting up your RTO, or joining one your organisation already set up?</p>
       <div class="tabs">
         <button class="tab-btn active" id="tab-admin" onclick="showSignupMode('admin')">RTO ADMIN</button>
-        <button class="tab-btn" id="tab-trainer" onclick="showSignupMode('trainer')">I'm a trainer</button>
+        <button class="tab-btn" id="tab-trainer" onclick="showSignupMode('trainer')">I am a Trainer/Team Member</button>
       </div>
 
       <div id="signup-admin-fields">
         <label for="org-name">Organisation (RTO) name</label>
         <input type="text" id="org-name" placeholder="e.g. Healthy Business Training Academy">
+        <label for="admin-code">Admin access code</label>
+        <input type="text" id="admin-code" placeholder="Given to you when your RTO was approved">
       </div>
 
       <div id="signup-trainer-fields" style="display:none">
@@ -172,7 +174,13 @@ async function signup() {
 
   if (signupMode === "admin") {
     const orgName = document.getElementById("org-name").value.trim();
+    const adminCode = document.getElementById("admin-code").value.trim();
     if (!orgName) return showError("signup-error", "Enter your organisation's name.");
+    if (!adminCode) return showError("signup-error", "Enter your admin access code.");
+
+    const { data: codeValid, error: codeError } = await db.rpc("check_admin_code", { code_input: adminCode });
+    if (codeError) return showError("signup-error", codeError.message);
+    if (!codeValid) return showError("signup-error", "That admin access code is invalid or has already been used.");
 
     const { data: authData, error: authError } = await db.auth.signUp({ email, password });
     if (authError) return showError("signup-error", authError.message);
@@ -193,6 +201,8 @@ async function signup() {
       .from("profiles")
       .insert({ id: authData.user.id, org_id: orgId, full_name: fullName, role: "admin" });
     if (profileError) return showError("signup-error", profileError.message);
+
+    await db.rpc("redeem_admin_code", { code_input: adminCode });
   } else {
     const inviteCode = document.getElementById("invite-code").value.trim().toUpperCase();
     if (!inviteCode) return showError("signup-error", "Enter your organisation's invite code.");

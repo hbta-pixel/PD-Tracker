@@ -136,3 +136,48 @@ create policy "pd-photos upload" on storage.objects
 drop policy if exists "pd-photos read" on storage.objects;
 create policy "pd-photos read" on storage.objects
   for select to public using (bucket_id = 'pd-photos');
+
+-- Gates "RTO Admin" signup: a one-time code the site owner hands out
+-- privately to a verified RTO before they create an organisation. No RLS
+-- policies are defined here on purpose — all access goes through the two
+-- security-definer functions below, so codes can't be listed or edited
+-- directly from the client.
+create table if not exists admin_access_codes (
+  id uuid primary key default gen_random_uuid(),
+  code text unique not null,
+  used_by uuid references profiles(id) on delete set null,
+  used_at timestamptz,
+  created_at timestamptz not null default now()
+);
+
+alter table admin_access_codes enable row level security;
+
+-- Called before auth.signUp() so an invalid code is rejected without
+-- creating an auth user. Read-only, so safe to expose to anon.
+create or replace function public.check_admin_code(code_input text)
+returns boolean
+language sql stable security definer set search_path = public as $$
+  select exists (
+    select 1 from admin_access_codes where code = code_input and used_at is null
+  )
+$$;
+
+-- Called after the new admin's org + profile are created, to mark the code
+-- used. Atomic (single UPDATE ... WHERE used_at is null), so two signups
+-- racing on the same code can't both succeed.
+create or replace function public.redeem_admin_code(code_input text)
+returns boolean
+language plpgsql security definer set search_path = public as $$
+declare
+  redeemed_id uuid;
+begin
+  update admin_access_codes
+  set used_at = now(), used_by = auth.uid()
+  where code = code_input and used_at is null
+  returning id into redeemed_id;
+  return redeemed_id is not null;
+end;
+$$;
+
+grant execute on function public.check_admin_code(text) to anon, authenticated;
+grant execute on function public.redeem_admin_code(text) to authenticated;
