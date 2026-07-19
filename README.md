@@ -62,6 +62,12 @@ No subscription billing yet.
 - **Forgot password?** On the login screen, trainers and admins can request a
   reset link by email (uses Supabase Auth's built-in recovery email — no
   extra email service needed) and set a new password on the linked page.
+- **Updating email**: the "Account" link in the top bar (capture and
+  dashboard screens) lets a trainer or admin change their login email. This
+  uses Supabase Auth's built-in email-change confirmation — by default the
+  new address must be confirmed before the change takes effect; if you've
+  turned on "Secure email change" (Authentication settings), the old address
+  gets a confirmation link too.
 
 ## Known simplifications (MVP)
 

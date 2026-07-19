@@ -4,6 +4,7 @@ const SHELL = [
   "capture.html",
   "dashboard.html",
   "reset-password.html",
+  "account.html",
   "styles.css",
   "common.js",
   "config.js",
