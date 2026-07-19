@@ -68,13 +68,13 @@ No subscription billing yet.
   new address must be confirmed before the change takes effect; if you've
   turned on "Secure email change" (Authentication settings), the old address
   gets a confirmation link too.
-- **Changing RTOs**: on the Account page, a trainer can enter a different
-  RTO's invite code to move their profile there — same login, no new
-  account needed. Entries they already logged stay attached to their
-  previous RTO (so that RTO keeps its compliance record), but the trainer
-  still sees their full history under "Your entries". Not available to
-  admins, since an admin switching orgs would leave their organisation
-  without one.
+- **Working across multiple RTOs**: on the Account page, a trainer can enter
+  another RTO's invite code to grant that RTO visibility into their PD —
+  useful for sessional trainers who work for more than one RTO at once.
+  Their home organisation (set at signup, shown at the top of the capture
+  screen, and what new entries log against) doesn't change; the trainer
+  just gains an additional RTO that can see their entry history. Not
+  available to admins.
 
 ## Known simplifications (MVP)
 
@@ -93,6 +93,11 @@ No subscription billing yet.
 - No push notifications — the dashboard updates live only while it's open;
   refresh to pick up entries submitted while it was closed (it also
   re-subscribes and reloads on every new insert automatically).
+- The dashboard's live-update subscription only triggers on new entries
+  logged under your own org. Entries from a trainer who's granted you
+  access via another org (see "Working across multiple RTOs") still show up
+  in the list, just not until the next refresh — the realtime feed isn't
+  scoped to that wider set yet.
 
 ## Natural next steps
 
