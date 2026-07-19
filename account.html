@@ -36,6 +36,23 @@
     <button type="button" class="text-link" style="margin-top:14px" onclick="goBack()">Back</button>
   </div>
 
+  <div class="card" id="switch-org-card" style="display:none">
+    <h2>Change organisation</h2>
+    <p class="hint">
+      Changed jobs? Enter your new RTO's invite code to move your profile there.
+      You'll keep the same login. PD you log from now on will belong to your
+      new RTO — entries you've already logged stay with your previous RTO's
+      records, but you'll still see your full history under "Your entries".
+    </p>
+
+    <label for="switch-invite-code">New RTO's invite code</label>
+    <input type="text" id="switch-invite-code" placeholder="Given to you by your new RTO">
+
+    <div id="switch-error"></div>
+    <div id="switch-success"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:18px" id="switch-org-btn" onclick="switchOrganization()">Move my profile</button>
+  </div>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -83,12 +100,49 @@ async function updateEmail() {
     "Your login email won't change until you confirm.</div>";
 }
 
+async function switchOrganization() {
+  document.getElementById("switch-error").innerHTML = "";
+  document.getElementById("switch-success").innerHTML = "";
+
+  const code = document.getElementById("switch-invite-code").value.trim().toUpperCase();
+  if (!code) {
+    document.getElementById("switch-error").innerHTML = '<div class="error">Enter an invite code.</div>';
+    return;
+  }
+
+  const btn = document.getElementById("switch-org-btn");
+  btn.disabled = true;
+  btn.textContent = "Moving…";
+
+  const { data: switched, error } = await db.rpc("switch_organization", { invite_code_input: code });
+
+  btn.disabled = false;
+  btn.textContent = "Move my profile";
+
+  if (error) {
+    document.getElementById("switch-error").innerHTML = `<div class="error">${error.message}</div>`;
+    return;
+  }
+  if (!switched) {
+    document.getElementById("switch-error").innerHTML =
+      '<div class="error">That invite code wasn\'t found. Check with your new RTO.</div>';
+    return;
+  }
+
+  document.getElementById("switch-success").innerHTML =
+    '<div class="success">Done — you\'re now linked to your new RTO. Redirecting…</div>';
+  setTimeout(() => { window.location.href = "capture.html"; }, 1200);
+}
+
 (async () => {
   const result = await requireAuth(null);
   if (!result) return;
   profileCtx = result;
   document.getElementById("org-label").textContent = result.profile.organizations?.name ?? "";
   document.getElementById("current-email").value = result.session.user.email ?? "";
+  if (result.profile.role === "trainer") {
+    document.getElementById("switch-org-card").style.display = "block";
+  }
 })();
 </script>
 </body>

@@ -68,6 +68,13 @@ No subscription billing yet.
   new address must be confirmed before the change takes effect; if you've
   turned on "Secure email change" (Authentication settings), the old address
   gets a confirmation link too.
+- **Changing RTOs**: on the Account page, a trainer can enter a different
+  RTO's invite code to move their profile there — same login, no new
+  account needed. Entries they already logged stay attached to their
+  previous RTO (so that RTO keeps its compliance record), but the trainer
+  still sees their full history under "Your entries". Not available to
+  admins, since an admin switching orgs would leave their organisation
+  without one.
 
 ## Known simplifications (MVP)
 

@@ -181,3 +181,34 @@ $$;
 
 grant execute on function public.check_admin_code(text) to anon, authenticated;
 grant execute on function public.redeem_admin_code(text) to authenticated;
+
+-- Lets a trainer move their own profile to a different organisation (e.g.
+-- changing jobs) by supplying that org's invite code, without losing their
+-- account or PD history. Entries already logged stay attached to the org
+-- they were logged under (see pd_entries.org_id) — only the profile's
+-- current org_id changes, so future entries log against the new RTO while
+-- the old RTO keeps its historical record. Security definer + explicit
+-- role check so this can't be used to touch org_id or role via a raw
+-- client-side update (the "profiles update own" RLS policy only checks
+-- row ownership, not which columns change).
+create or replace function public.switch_organization(invite_code_input text)
+returns boolean
+language plpgsql security definer set search_path = public as $$
+declare
+  target_org_id uuid;
+begin
+  if (select role from profiles where id = auth.uid()) <> 'trainer' then
+    raise exception 'Only trainers can switch organisations.';
+  end if;
+
+  select id into target_org_id from organizations where invite_code = invite_code_input;
+  if target_org_id is null then
+    return false;
+  end if;
+
+  update profiles set org_id = target_org_id where id = auth.uid();
+  return true;
+end;
+$$;
+
+grant execute on function public.switch_organization(text) to authenticated;
