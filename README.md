@@ -50,6 +50,9 @@ No subscription billing yet.
   submit. It's instantly queryable on the admin dashboard.
 - **Admins** land on the dashboard: filter by staff/type/date, watch entries
   arrive live, download everything as CSV.
+- **Forgot password?** On the login screen, trainers and admins can request a
+  reset link by email (uses Supabase Auth's built-in recovery email — no
+  extra email service needed) and set a new password on the linked page.
 
 ## Known simplifications (MVP)
 

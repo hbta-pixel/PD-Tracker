@@ -3,6 +3,7 @@ const SHELL = [
   "index.html",
   "capture.html",
   "dashboard.html",
+  "reset-password.html",
   "styles.css",
   "common.js",
   "config.js",
