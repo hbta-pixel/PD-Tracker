@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PD Tracker | Account</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00A599">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <h1>PD Tracker</h1>
+    <div class="sub" id="org-label">&nbsp;</div>
+  </div>
+  <button class="link" onclick="signOut()">Log out</button>
+</header>
+
+<main class="container">
+
+  <div class="card">
+    <h2>Your account</h2>
+    <p class="hint">Update the email address you use to log in.</p>
+
+    <label for="current-email">Current email</label>
+    <input type="email" id="current-email" disabled>
+
+    <label for="new-email">New email address</label>
+    <input type="email" id="new-email" autocomplete="email">
+
+    <div id="email-error"></div>
+    <div id="email-success"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:18px" id="update-email-btn" onclick="updateEmail()">Update email</button>
+    <button type="button" class="text-link" style="margin-top:14px" onclick="goBack()">Back</button>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+let profileCtx = null;
+
+function goBack() {
+  window.location.href = profileCtx.profile.role === "admin" ? "dashboard.html" : "capture.html";
+}
+
+async function updateEmail() {
+  document.getElementById("email-error").innerHTML = "";
+  document.getElementById("email-success").innerHTML = "";
+
+  const newEmail = document.getElementById("new-email").value.trim();
+  if (!newEmail) {
+    document.getElementById("email-error").innerHTML = '<div class="error">Enter a new email address.</div>';
+    return;
+  }
+  if (newEmail === profileCtx.session.user.email) {
+    document.getElementById("email-error").innerHTML = '<div class="error">That\'s already your current email.</div>';
+    return;
+  }
+
+  const btn = document.getElementById("update-email-btn");
+  btn.disabled = true;
+  btn.textContent = "Sending…";
+
+  const { error } = await db.auth.updateUser({ email: newEmail });
+
+  btn.disabled = false;
+  btn.textContent = "Update email";
+
+  if (error) {
+    document.getElementById("email-error").innerHTML = `<div class="error">${error.message}</div>`;
+    return;
+  }
+
+  document.getElementById("new-email").value = "";
+  document.getElementById("email-success").innerHTML =
+    '<div class="success">Check your inbox for a confirmation link to finish the change ' +
+    "(you may get one at your old address too, depending on your RTO's security settings). " +
+    "Your login email won't change until you confirm.</div>";
+}
+
+(async () => {
+  const result = await requireAuth(null);
+  if (!result) return;
+  profileCtx = result;
+  document.getElementById("org-label").textContent = result.profile.organizations?.name ?? "";
+  document.getElementById("current-email").value = result.session.user.email ?? "";
+})();
+</script>
+</body>
+</html>
