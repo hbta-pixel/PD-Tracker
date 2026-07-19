@@ -98,6 +98,20 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .btn-block { width: 100%; }
 .btn-danger { background: var(--danger); color: #fff; }
 
+.text-link {
+  display: block;
+  width: 100%;
+  background: none;
+  border: none;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+  text-align: center;
+  text-decoration: underline;
+}
+
 .tabs { display: flex; gap: 8px; margin-bottom: 18px; }
 .tab-btn {
   flex: 1;
