@@ -40,11 +40,20 @@ No subscription billing yet.
 
 ## Using it
 
-- **First user (you)**: go to the site, Sign up → "I'm an RTO admin", enter
-  your organisation's name. This creates your organisation and gives you an
-  **invite code** shown on your dashboard.
-- **Trainers**: Sign up → "I'm a trainer", enter the invite code your admin
-  shared with them.
+- **RTO Admin signup is gated by an access code.** Before anyone can create
+  an organisation, generate a one-time code for them in Supabase's SQL
+  Editor:
+  ```sql
+  insert into admin_access_codes (code) values ('YOUR-CODE-HERE');
+  ```
+  Share that code with the RTO privately (email, etc). It's consumed
+  automatically the moment their signup succeeds, so it can't be reused.
+- **First user (you)**: go to the site, Sign up → "RTO ADMIN", enter your
+  organisation's name and an access code (generate one for yourself first,
+  as above). This creates your organisation and gives you an **invite
+  code** shown on your dashboard.
+- **Trainers**: Sign up → "I am a Trainer/Team Member", enter the invite
+  code your admin shared with them.
 - **Trainers** land on the capture screen: pick VET PD / Vocational PD /
   Industry Engagement, tap the mic and talk, optionally attach a photo, hit
   submit. It's instantly queryable on the admin dashboard.
@@ -56,9 +65,10 @@ No subscription billing yet.
 
 ## Known simplifications (MVP)
 
-- No subscription/billing yet — anyone can sign up and create an organisation.
-  Add Stripe (or similar) in front of the admin sign-up flow when you're
-  ready to charge.
+- No subscription/billing yet — RTO Admin signup is gated by a one-time
+  access code you hand out manually (see above), but there's no payment
+  collection. Add Stripe (or similar) in front of the admin sign-up flow
+  when you're ready to charge.
 - Entries are append-only (no edit/delete) — intentional for evidence
   integrity, but you may want an admin "flag/dismiss" action later.
 - The `organizations` table is readable (name + invite code) by any signed-in
