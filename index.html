@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PD Tracker | Sign in</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00A599">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <h1>PD Tracker</h1>
+    <div class="sub">Professional development, captured in the moment</div>
+  </div>
+</header>
+
+<main class="container">
+
+  <div class="card">
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-login" onclick="showTab('login')">Log in</button>
+      <button class="tab-btn" id="tab-signup" onclick="showTab('signup')">Sign up</button>
+    </div>
+
+    <!-- LOGIN -->
+    <section id="panel-login">
+      <h2>Welcome back</h2>
+      <p class="hint">Log in to capture PD or view your organisation's dashboard.</p>
+      <label for="login-email">Email</label>
+      <input type="email" id="login-email" autocomplete="email">
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" autocomplete="current-password">
+      <div id="login-error"></div>
+      <button class="btn btn-primary btn-block" style="margin-top:18px" onclick="login()">Log in</button>
+    </section>
+
+    <!-- SIGN UP -->
+    <section id="panel-signup" style="display:none">
+      <h2>Create your account</h2>
+      <p class="hint">Are you setting up your RTO, or joining one your organisation already set up?</p>
+      <div class="tabs">
+        <button class="tab-btn active" id="tab-admin" onclick="showSignupMode('admin')">I'm an RTO admin</button>
+        <button class="tab-btn" id="tab-trainer" onclick="showSignupMode('trainer')">I'm a trainer</button>
+      </div>
+
+      <div id="signup-admin-fields">
+        <label for="org-name">Organisation (RTO) name</label>
+        <input type="text" id="org-name" placeholder="e.g. Healthy Business Training Academy">
+      </div>
+
+      <div id="signup-trainer-fields" style="display:none">
+        <label for="invite-code">Invite code</label>
+        <input type="text" id="invite-code" placeholder="Given to you by your RTO">
+      </div>
+
+      <label for="signup-name">Your full name</label>
+      <input type="text" id="signup-name" autocomplete="name">
+      <label for="signup-email">Email</label>
+      <input type="email" id="signup-email" autocomplete="email">
+      <label for="signup-password">Password</label>
+      <input type="password" id="signup-password" autocomplete="new-password">
+      <div id="signup-error"></div>
+      <button class="btn btn-primary btn-block" style="margin-top:18px" onclick="signup()">Create account</button>
+    </section>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+let signupMode = "admin";
+
+function showTab(which) {
+  document.getElementById("panel-login").style.display = which === "login" ? "block" : "none";
+  document.getElementById("panel-signup").style.display = which === "signup" ? "block" : "none";
+  document.getElementById("tab-login").classList.toggle("active", which === "login");
+  document.getElementById("tab-signup").classList.toggle("active", which === "signup");
+}
+
+function showSignupMode(mode) {
+  signupMode = mode;
+  document.getElementById("tab-admin").classList.toggle("active", mode === "admin");
+  document.getElementById("tab-trainer").classList.toggle("active", mode === "trainer");
+  document.getElementById("signup-admin-fields").style.display = mode === "admin" ? "block" : "none";
+  document.getElementById("signup-trainer-fields").style.display = mode === "trainer" ? "block" : "none";
+}
+
+function showError(elId, message) {
+  document.getElementById(elId).innerHTML = message ? `<div class="error">${message}</div>` : "";
+}
+
+function showConfirmEmailNotice(elId) {
+  document.getElementById(elId).innerHTML =
+    '<div class="error">Check your email to confirm your account, then log in. ' +
+    '(If you\'re the developer setting this up: Supabase Auth has "Confirm email" ' +
+    'turned on — turn it off in Authentication &gt; Sign In / Providers for a ' +
+    "quicker internal test flow.)</div>";
+}
+
+async function login() {
+  showError("login-error", "");
+  if (!db) return showError("login-error", "Supabase isn't configured yet — see pd-tracker/config.js.");
+  const email = document.getElementById("login-email").value.trim();
+  const password = document.getElementById("login-password").value;
+  if (!email || !password) return showError("login-error", "Enter your email and password.");
+
+  const { error } = await db.auth.signInWithPassword({ email, password });
+  if (error) return showError("login-error", error.message);
+  await routeAfterAuth();
+}
+
+async function signup() {
+  showError("signup-error", "");
+  if (!db) return showError("signup-error", "Supabase isn't configured yet — see pd-tracker/config.js.");
+  const fullName = document.getElementById("signup-name").value.trim();
+  const email = document.getElementById("signup-email").value.trim();
+  const password = document.getElementById("signup-password").value;
+  if (!fullName || !email || !password) return showError("signup-error", "Fill in all fields.");
+  if (password.length < 6) return showError("signup-error", "Password must be at least 6 characters.");
+
+  let orgId;
+  let inviteCodeToShow = null;
+
+  if (signupMode === "admin") {
+    const orgName = document.getElementById("org-name").value.trim();
+    if (!orgName) return showError("signup-error", "Enter your organisation's name.");
+
+    const { data: authData, error: authError } = await db.auth.signUp({ email, password });
+    if (authError) return showError("signup-error", authError.message);
+    if (!authData.session) return showConfirmEmailNotice("signup-error");
+
+    const inviteCode = Math.random().toString(36).slice(2, 8).toUpperCase();
+    const { data: org, error: orgError } = await db
+      .from("organizations")
+      .insert({ name: orgName, invite_code: inviteCode })
+      .select()
+      .single();
+    if (orgError) return showError("signup-error", orgError.message);
+
+    orgId = org.id;
+    inviteCodeToShow = org.invite_code;
+
+    const { error: profileError } = await db
+      .from("profiles")
+      .insert({ id: authData.user.id, org_id: orgId, full_name: fullName, role: "admin" });
+    if (profileError) return showError("signup-error", profileError.message);
+  } else {
+    const inviteCode = document.getElementById("invite-code").value.trim().toUpperCase();
+    if (!inviteCode) return showError("signup-error", "Enter your organisation's invite code.");
+
+    const { data: org, error: orgLookupError } = await db
+      .from("organizations")
+      .select("id")
+      .eq("invite_code", inviteCode)
+      .maybeSingle();
+    if (orgLookupError || !org) return showError("signup-error", "That invite code wasn't found. Check with your RTO admin.");
+
+    const { data: authData, error: authError } = await db.auth.signUp({ email, password });
+    if (authError) return showError("signup-error", authError.message);
+    if (!authData.session) return showConfirmEmailNotice("signup-error");
+
+    orgId = org.id;
+    const { error: profileError } = await db
+      .from("profiles")
+      .insert({ id: authData.user.id, org_id: orgId, full_name: fullName, role: "trainer" });
+    if (profileError) return showError("signup-error", profileError.message);
+  }
+
+  if (inviteCodeToShow) {
+    alert(`Organisation created! Your trainer invite code is: ${inviteCodeToShow}\n\nShare this with your trainers so they can join.`);
+  }
+  await routeAfterAuth();
+}
+
+async function routeAfterAuth() {
+  const result = await getSessionProfile();
+  if (!result) return;
+  window.location.href = result.profile.role === "admin" ? "dashboard.html" : "capture.html";
+}
+
+(async () => {
+  const result = await getSessionProfile();
+  if (result) await routeAfterAuth();
+})();
+</script>
+</body>
+</html>

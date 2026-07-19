@@ -1,0 +1,13 @@
+{
+  "name": "PD Tracker",
+  "short_name": "PD Tracker",
+  "description": "Capture VET PD, vocational PD and industry engagement on the go.",
+  "start_url": "index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f8fa",
+  "theme_color": "#00A599",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

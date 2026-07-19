@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PD Tracker | Dashboard</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00A599">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <h1>PD Tracker</h1>
+    <div class="sub" id="org-label">&nbsp;</div>
+  </div>
+  <button class="link" onclick="signOut()">Log out</button>
+</header>
+
+<main class="container wide">
+
+  <div class="card">
+    <h3>Invite your trainers</h3>
+    <p class="hint">Share this code — trainers enter it when they sign up in the app.</p>
+    <span class="invite-code" id="invite-code">——</span>
+  </div>
+
+  <div class="stat-row" id="stat-row"></div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <h3 style="margin-bottom:0">Live activity</h3>
+      <button class="btn btn-outline" onclick="exportCSV()">Download CSV</button>
+    </div>
+
+    <div class="filters" style="margin-top:16px">
+      <select id="filter-staff" onchange="loadEntries()"><option value="">All staff</option></select>
+      <select id="filter-type" onchange="loadEntries()">
+        <option value="">All types</option>
+        <option value="vet_pd">VET PD</option>
+        <option value="vocational_pd">Vocational PD</option>
+        <option value="industry_engagement">Industry Engagement</option>
+      </select>
+      <input type="date" id="filter-from" onchange="loadEntries()">
+      <input type="date" id="filter-to" onchange="loadEntries()">
+      <button class="btn btn-outline" onclick="clearFilters()">Clear filters</button>
+    </div>
+
+    <div style="overflow-x:auto">
+      <table>
+        <thead>
+          <tr><th>Staff</th><th>Type</th><th>Date</th><th>Title</th><th>Details</th><th>Evidence</th><th>Submitted</th></tr>
+        </thead>
+        <tbody id="entries-body"></tbody>
+      </table>
+      <div id="entries-empty" class="empty-state" style="display:none">No entries match these filters yet.</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3>Scheduled email reports</h3>
+    <p class="hint">
+      Have the CSV report emailed to you automatically on a recurring basis, instead of
+      downloading it manually. <strong>Note:</strong> automatic sending isn't switched on yet —
+      saving here just records your preference for when it is.
+    </p>
+
+    <label for="report-email">Send reports to</label>
+    <input type="email" id="report-email" placeholder="you@example.com">
+
+    <label for="report-frequency">How often</label>
+    <select id="report-frequency">
+      <option value="weekly">Weekly</option>
+      <option value="fortnightly">Fortnightly</option>
+      <option value="monthly">Monthly</option>
+    </select>
+
+    <label style="display:flex; align-items:center; gap:8px; margin-top:14px;">
+      <input type="checkbox" id="report-enabled" style="width:auto" checked>
+      Enabled
+    </label>
+
+    <div id="report-error"></div>
+    <div id="report-success"></div>
+    <button class="btn btn-primary" style="margin-top:16px" onclick="saveReportSchedule()">Save preference</button>
+    <p class="hint" id="report-status" style="margin-top:14px; margin-bottom:0"></p>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+let profileCtx = null;
+let staffById = {};
+let currentEntries = [];
+
+async function loadStaff() {
+  const { data, error } = await db
+    .from("profiles")
+    .select("id, full_name")
+    .eq("org_id", profileCtx.profile.org_id)
+    .order("full_name");
+  if (error) return;
+  staffById = Object.fromEntries(data.map((s) => [s.id, s.full_name]));
+  const select = document.getElementById("filter-staff");
+  select.innerHTML =
+    '<option value="">All staff</option>' +
+    data.map((s) => `<option value="${s.id}">${escapeHtml(s.full_name)}</option>`).join("");
+}
+
+function clearFilters() {
+  document.getElementById("filter-staff").value = "";
+  document.getElementById("filter-type").value = "";
+  document.getElementById("filter-from").value = "";
+  document.getElementById("filter-to").value = "";
+  loadEntries();
+}
+
+async function loadEntries() {
+  let query = db
+    .from("pd_entries")
+    .select("*")
+    .eq("org_id", profileCtx.profile.org_id)
+    .order("created_at", { ascending: false });
+
+  const staffFilter = document.getElementById("filter-staff").value;
+  const typeFilter = document.getElementById("filter-type").value;
+  const fromFilter = document.getElementById("filter-from").value;
+  const toFilter = document.getElementById("filter-to").value;
+
+  if (staffFilter) query = query.eq("staff_id", staffFilter);
+  if (typeFilter) query = query.eq("entry_type", typeFilter);
+  if (fromFilter) query = query.gte("entry_date", fromFilter);
+  if (toFilter) query = query.lte("entry_date", toFilter);
+
+  const { data, error } = await query.limit(500);
+  if (error) return;
+  currentEntries = data;
+  renderEntries(data);
+  renderStats(data);
+}
+
+function renderEntries(data) {
+  const body = document.getElementById("entries-body");
+  const empty = document.getElementById("entries-empty");
+  if (!data.length) {
+    body.innerHTML = "";
+    empty.style.display = "block";
+    return;
+  }
+  empty.style.display = "none";
+  body.innerHTML = data
+    .map((e) => {
+      const staffName = staffById[e.staff_id] ?? "Unknown";
+      const details = [e.contact_name ? `With: ${escapeHtml(e.contact_name)}` : "", escapeHtml(e.transcript ?? "")]
+        .filter(Boolean)
+        .join("<br>");
+      return `<tr>
+        <td>${escapeHtml(staffName)}</td>
+        <td><span class="badge ${e.entry_type}">${ENTRY_TYPES[e.entry_type].short}</span></td>
+        <td>${e.entry_date}</td>
+        <td>${escapeHtml(e.title ?? "")}</td>
+        <td>${details}</td>
+        <td>${e.photo_url ? `<a href="${e.photo_url}" target="_blank">Photo</a>` : "—"}</td>
+        <td>${formatDateTime(e.created_at)}</td>
+      </tr>`;
+    })
+    .join("");
+}
+
+function renderStats(data) {
+  const counts = { vet_pd: 0, vocational_pd: 0, industry_engagement: 0 };
+  data.forEach((e) => { if (counts[e.entry_type] !== undefined) counts[e.entry_type]++; });
+  const staffCount = new Set(data.map((e) => e.staff_id)).size;
+  document.getElementById("stat-row").innerHTML = `
+    <div class="stat-card"><div class="num">${data.length}</div><div class="label">Total entries</div></div>
+    <div class="stat-card"><div class="num">${counts.vet_pd}</div><div class="label">VET PD</div></div>
+    <div class="stat-card"><div class="num">${counts.vocational_pd}</div><div class="label">Vocational PD</div></div>
+    <div class="stat-card"><div class="num">${counts.industry_engagement}</div><div class="label">Industry Engagement</div></div>
+    <div class="stat-card"><div class="num">${staffCount}</div><div class="label">Active staff</div></div>
+  `;
+}
+
+function exportCSV() {
+  const rows = currentEntries.map((e) => ({ ...e, staff_name: staffById[e.staff_id] ?? "Unknown" }));
+  downloadText(`pd-tracker-export-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows));
+}
+
+const FREQUENCY_LABELS = { weekly: "Weekly", fortnightly: "Fortnightly", monthly: "Monthly" };
+
+async function loadReportSchedule() {
+  const { data, error } = await db
+    .from("report_schedules")
+    .select("*")
+    .eq("org_id", profileCtx.profile.org_id)
+    .maybeSingle();
+
+  if (error || !data) {
+    document.getElementById("report-email").value = profileCtx.session.user.email ?? "";
+    document.getElementById("report-status").textContent = "No report schedule set up yet.";
+    return;
+  }
+
+  document.getElementById("report-email").value = data.recipient_email;
+  document.getElementById("report-frequency").value = data.frequency;
+  document.getElementById("report-enabled").checked = data.enabled;
+  const lastSent = data.last_sent_at ? formatDateTime(data.last_sent_at) : "Never yet";
+  document.getElementById("report-status").textContent =
+    `${FREQUENCY_LABELS[data.frequency]} · ${data.enabled ? "Enabled" : "Disabled"} · Last sent: ${lastSent}`;
+}
+
+async function saveReportSchedule() {
+  showReportMessage("");
+  const email = document.getElementById("report-email").value.trim();
+  const frequency = document.getElementById("report-frequency").value;
+  const enabled = document.getElementById("report-enabled").checked;
+  if (!email) return showReportMessage("Enter an email address.", true);
+
+  const { error } = await db.from("report_schedules").upsert(
+    {
+      org_id: profileCtx.profile.org_id,
+      recipient_email: email,
+      frequency,
+      enabled,
+    },
+    { onConflict: "org_id" }
+  );
+  if (error) return showReportMessage(error.message, true);
+
+  showReportMessage("Saved.", false, true);
+  loadReportSchedule();
+}
+
+function showReportMessage(message, isError, isSuccess) {
+  document.getElementById("report-error").innerHTML = isError && message ? `<div class="error">${message}</div>` : "";
+  document.getElementById("report-success").innerHTML = isSuccess && message ? `<div class="success">${message}</div>` : "";
+}
+
+function subscribeRealtime() {
+  db.channel("pd_entries_live")
+    .on(
+      "postgres_changes",
+      { event: "INSERT", schema: "public", table: "pd_entries", filter: `org_id=eq.${profileCtx.profile.org_id}` },
+      () => loadEntries()
+    )
+    .subscribe();
+}
+
+(async () => {
+  const result = await requireAuth("admin");
+  if (!result) return;
+  profileCtx = result;
+  document.getElementById("org-label").textContent = result.profile.organizations?.name ?? "";
+  document.getElementById("invite-code").textContent = result.profile.organizations?.invite_code ?? "——";
+  await loadStaff();
+  await loadEntries();
+  await loadReportSchedule();
+  subscribeRealtime();
+})();
+</script>
+</body>
+</html>

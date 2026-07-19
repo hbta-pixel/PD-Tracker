@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PD Tracker | Capture</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#00A599">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div>
+    <h1>PD Tracker</h1>
+    <div class="sub" id="org-label">&nbsp;</div>
+  </div>
+  <button class="link" onclick="signOut()">Log out</button>
+</header>
+
+<main class="container">
+
+  <div class="card">
+    <h2>Log new PD</h2>
+    <p class="hint">Pick what you're logging, talk through it, and submit — no forms to fill in later.</p>
+
+    <div class="type-grid">
+      <div class="type-card" data-type="vet_pd" onclick="selectType('vet_pd')">
+        <span class="emoji">🎓</span>VET Professional<br>Development
+      </div>
+      <div class="type-card" data-type="vocational_pd" onclick="selectType('vocational_pd')">
+        <span class="emoji">🛠️</span>Vocational PD
+      </div>
+      <div class="type-card" data-type="industry_engagement" onclick="selectType('industry_engagement')">
+        <span class="emoji">🤝</span>Industry<br>Engagement
+      </div>
+    </div>
+
+    <form id="entry-form" style="display:none">
+      <label for="title">Title / what it was</label>
+      <div class="mic-row">
+        <button type="button" class="mic-btn mic-btn-sm" id="title-mic-btn">🎤</button>
+        <input type="text" id="title" placeholder="e.g. Assessment Validation Webinar" style="flex:1">
+      </div>
+      <div class="mic-status" id="title-mic-status"></div>
+
+      <div id="contact-field" style="display:none">
+        <label for="contact-name">Who did you speak with / engage with?</label>
+        <input type="text" id="contact-name" placeholder="Name, business or organisation">
+      </div>
+
+      <label for="entry-date">Date</label>
+      <input type="date" id="entry-date">
+
+      <label for="transcript">Talk it through (or type)</label>
+      <div class="mic-row">
+        <button type="button" class="mic-btn" id="mic-btn">🎤</button>
+        <span class="mic-status" id="mic-status">Tap the mic and speak — you can edit the text after.</span>
+      </div>
+      <textarea id="transcript" placeholder="What did you take away from it? What was covered / discussed?" style="margin-top:10px"></textarea>
+
+      <label>Photo evidence (optional)</label>
+      <div class="photo-row">
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('camera-input').click()">📷 Take photo</button>
+        <button type="button" class="btn btn-outline" onclick="document.getElementById('upload-input').click()">🖼️ Upload Evidence</button>
+        <input type="file" id="camera-input" class="file-input-hidden" accept="image/*" capture="environment" onchange="onPhotoSelected(event)">
+        <input type="file" id="upload-input" class="file-input-hidden" accept="image/*" onchange="onPhotoSelected(event)">
+      </div>
+      <div class="photo-row" id="photo-preview-row" style="display:none">
+        <img id="photo-preview" class="photo-preview">
+        <button type="button" class="btn btn-outline" onclick="clearPhoto()">Remove</button>
+      </div>
+
+      <div id="submit-error"></div>
+      <button type="button" class="btn btn-primary btn-block" style="margin-top:20px" id="submit-btn" onclick="submitEntry()">Submit entry</button>
+    </form>
+    <div id="submit-success"></div>
+  </div>
+
+  <div class="card">
+    <div style="display:flex; justify-content:space-between; align-items:center; flex-wrap:wrap; gap:10px;">
+      <h3 style="margin-bottom:0">Your entries</h3>
+      <button class="btn btn-outline" onclick="exportMyCSV()">Download CSV</button>
+    </div>
+
+    <div class="filters" style="margin-top:16px">
+      <select id="my-filter-type" onchange="loadRecentEntries()">
+        <option value="">All types</option>
+        <option value="vet_pd">VET PD</option>
+        <option value="vocational_pd">Vocational PD</option>
+        <option value="industry_engagement">Industry Engagement</option>
+      </select>
+      <input type="date" id="my-filter-from" onchange="loadRecentEntries()">
+      <input type="date" id="my-filter-to" onchange="loadRecentEntries()">
+      <button class="btn btn-outline" onclick="clearMyFilters()">Clear filters</button>
+    </div>
+
+    <div id="recent-list"><div class="empty-state">Loading…</div></div>
+  </div>
+
+</main>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+<script src="config.js"></script>
+<script src="common.js"></script>
+<script>
+let profileCtx = null;
+let selectedType = null;
+let selectedPhotoFile = null;
+
+function selectType(type) {
+  selectedType = type;
+  document.querySelectorAll(".type-card").forEach((el) => {
+    el.classList.toggle("active", el.dataset.type === type);
+  });
+  document.getElementById("entry-form").style.display = "block";
+  document.getElementById("contact-field").style.display = type === "industry_engagement" ? "block" : "none";
+  document.getElementById("title").placeholder =
+    type === "industry_engagement" ? "e.g. Site visit to ABC Manufacturing" : "e.g. Assessment Validation Webinar";
+}
+
+function onPhotoSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  selectedPhotoFile = file;
+  document.getElementById("photo-preview").src = URL.createObjectURL(file);
+  document.getElementById("photo-preview-row").style.display = "flex";
+}
+
+function clearPhoto() {
+  selectedPhotoFile = null;
+  document.getElementById("camera-input").value = "";
+  document.getElementById("upload-input").value = "";
+  document.getElementById("photo-preview-row").style.display = "none";
+}
+
+// Wires a mic button to dictate into a text input/textarea. Works for any
+// field — used for both the title and the main transcript.
+function setupDictation(fieldId, buttonId, statusId, idleStatusText) {
+  const field = document.getElementById(fieldId);
+  const btn = document.getElementById(buttonId);
+  const statusEl = statusId ? document.getElementById(statusId) : null;
+
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    // Notably: Safari on iPhone (and any browser on iPhone, which all use Safari's
+    // engine) doesn't support this API at all — there's no fixing that from here.
+    // iOS has its own dictation mic built into the keyboard, so point people at that.
+    if (statusEl) {
+      statusEl.textContent =
+        "This browser doesn't support in-app dictation. On iPhone: tap into the field, " +
+        "then tap the microphone icon on your keyboard to dictate instead.";
+    }
+    btn.title = "Not supported in this browser — use your keyboard's dictation mic instead";
+    btn.style.opacity = "0.4";
+    btn.disabled = true;
+    return;
+  }
+
+  const recognition = new SR();
+  recognition.continuous = true;
+  recognition.interimResults = true;
+  recognition.lang = "en-AU";
+
+  let baseText = "";
+  let listening = false;
+
+  recognition.onstart = () => {
+    baseText = field.value;
+    if (baseText && !baseText.endsWith(" ")) baseText += " ";
+  };
+
+  recognition.onresult = (event) => {
+    let finalText = "";
+    let interimText = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const chunk = event.results[i][0].transcript;
+      if (event.results[i].isFinal) finalText += chunk + " ";
+      else interimText += chunk;
+    }
+    if (finalText) baseText += finalText;
+    field.value = baseText + interimText;
+  };
+
+  recognition.onerror = (event) => {
+    if (statusEl) statusEl.textContent = "Mic error: " + event.error;
+    stop();
+  };
+
+  recognition.onend = () => {
+    if (listening) stop();
+  };
+
+  function start() {
+    listening = true;
+    btn.classList.add("recording");
+    if (statusEl) statusEl.textContent = "Listening… tap again to stop.";
+    recognition.start();
+  }
+
+  function stop() {
+    listening = false;
+    btn.classList.remove("recording");
+    if (statusEl) statusEl.textContent = idleStatusText;
+    try { recognition.stop(); } catch (e) {}
+  }
+
+  btn.addEventListener("click", () => (listening ? stop() : start()));
+}
+
+async function submitEntry() {
+  showSubmitMessage("");
+  if (!selectedType) return showSubmitMessage("Pick a PD type first.", true);
+  const title = document.getElementById("title").value.trim();
+  const entryDate = document.getElementById("entry-date").value;
+  const transcript = document.getElementById("transcript").value.trim();
+  const contactName = document.getElementById("contact-name").value.trim();
+  if (!entryDate) return showSubmitMessage("Pick a date.", true);
+  if (!transcript && !title) return showSubmitMessage("Add a title or a description of what happened.", true);
+
+  const submitBtn = document.getElementById("submit-btn");
+  submitBtn.disabled = true;
+  submitBtn.textContent = "Submitting…";
+
+  try {
+    let photoUrl = null;
+    if (selectedPhotoFile) {
+      const path = `${profileCtx.profile.org_id}/${profileCtx.session.user.id}/${Date.now()}-${selectedPhotoFile.name}`;
+      const { error: uploadError } = await db.storage.from("pd-photos").upload(path, selectedPhotoFile);
+      if (uploadError) throw uploadError;
+      photoUrl = db.storage.from("pd-photos").getPublicUrl(path).data.publicUrl;
+    }
+
+    const { error: insertError } = await db.from("pd_entries").insert({
+      org_id: profileCtx.profile.org_id,
+      staff_id: profileCtx.session.user.id,
+      entry_type: selectedType,
+      title: title || null,
+      entry_date: entryDate,
+      transcript: transcript || null,
+      contact_name: contactName || null,
+      photo_url: photoUrl,
+    });
+    if (insertError) throw insertError;
+
+    resetForm();
+    showSubmitMessage("Saved — synced to your RTO's dashboard.", false, true);
+    loadRecentEntries();
+  } catch (err) {
+    showSubmitMessage(err.message || "Something went wrong. Try again.", true);
+  } finally {
+    submitBtn.disabled = false;
+    submitBtn.textContent = "Submit entry";
+  }
+}
+
+function resetForm() {
+  document.getElementById("title").value = "";
+  document.getElementById("contact-name").value = "";
+  document.getElementById("transcript").value = "";
+  document.getElementById("entry-date").value = new Date().toISOString().slice(0, 10);
+  clearPhoto();
+
+  selectedType = null;
+  document.querySelectorAll(".type-card").forEach((el) => el.classList.remove("active"));
+  document.getElementById("entry-form").style.display = "none";
+}
+
+function showSubmitMessage(message, isError, isSuccess) {
+  document.getElementById("submit-error").innerHTML = isError && message ? `<div class="error">${message}</div>` : "";
+  document.getElementById("submit-success").innerHTML = isSuccess && message ? `<div class="success">${message}</div>` : "";
+}
+
+let myEntries = [];
+
+function clearMyFilters() {
+  document.getElementById("my-filter-type").value = "";
+  document.getElementById("my-filter-from").value = "";
+  document.getElementById("my-filter-to").value = "";
+  loadRecentEntries();
+}
+
+async function loadRecentEntries() {
+  let query = db
+    .from("pd_entries")
+    .select("*")
+    .eq("staff_id", profileCtx.session.user.id)
+    .order("created_at", { ascending: false });
+
+  const typeFilter = document.getElementById("my-filter-type").value;
+  const fromFilter = document.getElementById("my-filter-from").value;
+  const toFilter = document.getElementById("my-filter-to").value;
+
+  if (typeFilter) query = query.eq("entry_type", typeFilter);
+  if (fromFilter) query = query.gte("entry_date", fromFilter);
+  if (toFilter) query = query.lte("entry_date", toFilter);
+
+  const { data, error } = await query.limit(500);
+
+  const container = document.getElementById("recent-list");
+  if (error) {
+    container.innerHTML = `<div class="error">${error.message}</div>`;
+    return;
+  }
+  myEntries = data;
+  if (!data.length) {
+    container.innerHTML = '<div class="empty-state">Nothing logged yet — your first entry will show up here.</div>';
+    return;
+  }
+  container.innerHTML = data
+    .map(
+      (e) => `
+    <div class="entry-item">
+      <div class="meta">
+        <span class="badge ${e.entry_type}">${ENTRY_TYPES[e.entry_type].short}</span>
+        <span class="date">${e.entry_date}</span>
+      </div>
+      ${e.title ? `<div class="title">${escapeHtml(e.title)}</div>` : ""}
+      ${e.transcript ? `<div class="transcript">${escapeHtml(e.transcript)}</div>` : ""}
+      ${e.photo_url ? `<div style="margin-top:6px"><a href="${e.photo_url}" target="_blank">View photo</a></div>` : ""}
+    </div>`
+    )
+    .join("");
+}
+
+function exportMyCSV() {
+  const rows = myEntries.map((e) => ({ ...e, staff_name: profileCtx.profile.full_name }));
+  downloadText(`my-pd-entries-${new Date().toISOString().slice(0, 10)}.csv`, toCSV(rows));
+}
+
+(async () => {
+  const result = await requireAuth("trainer");
+  if (!result) return;
+  profileCtx = result;
+  document.getElementById("org-label").textContent = result.profile.organizations?.name ?? "";
+  document.getElementById("entry-date").value = new Date().toISOString().slice(0, 10);
+  setupDictation("transcript", "mic-btn", "mic-status", "Tap the mic and speak — you can edit the text after.");
+  setupDictation("title", "title-mic-btn", "title-mic-status", "");
+  loadRecentEntries();
+})();
+</script>
+</body>
+</html>
