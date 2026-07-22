@@ -36,6 +36,25 @@
     <button type="button" class="text-link" style="margin-top:14px" onclick="goBack()">Back</button>
   </div>
 
+  <div class="card" id="share-org-card" style="display:none">
+    <h2>Share your PD with another RTO</h2>
+    <p class="hint">
+      Work across more than one RTO? Enter another RTO's invite code and
+      they'll be able to see your full PD history on their dashboard — your
+      home organisation (shown at the top of this page) and login don't
+      change.
+    </p>
+
+    <label for="share-invite-code">RTO's invite code</label>
+    <input type="text" id="share-invite-code" placeholder="Given to you by that RTO">
+
+    <div id="share-error"></div>
+    <div id="share-success"></div>
+    <button class="btn btn-primary btn-block" style="margin-top:18px" id="share-org-btn" onclick="grantOrgAccess()">Grant access</button>
+
+    <div id="shared-orgs-list" style="margin-top:20px"></div>
+  </div>
+
 </main>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -83,12 +102,66 @@ async function updateEmail() {
     "Your login email won't change until you confirm.</div>";
 }
 
+async function loadSharedOrgs() {
+  const { data, error } = await db
+    .from("org_members")
+    .select("id, organizations(name)")
+    .eq("profile_id", profileCtx.session.user.id);
+
+  const container = document.getElementById("shared-orgs-list");
+  if (error || !data || !data.length) {
+    container.innerHTML = '<p class="hint" style="margin-bottom:0">Not currently shared with any other RTO.</p>';
+    return;
+  }
+  container.innerHTML =
+    '<p class="hint" style="margin-bottom:8px">Currently shared with:</p>' +
+    data.map((row) => `<span class="badge vet_pd" style="margin:0 6px 6px 0">${escapeHtml(row.organizations?.name ?? "Unknown")}</span>`).join("");
+}
+
+async function grantOrgAccess() {
+  document.getElementById("share-error").innerHTML = "";
+  document.getElementById("share-success").innerHTML = "";
+
+  const code = document.getElementById("share-invite-code").value.trim().toUpperCase();
+  if (!code) {
+    document.getElementById("share-error").innerHTML = '<div class="error">Enter an invite code.</div>';
+    return;
+  }
+
+  const btn = document.getElementById("share-org-btn");
+  btn.disabled = true;
+  btn.textContent = "Sharing…";
+
+  const { data: granted, error } = await db.rpc("grant_org_access", { invite_code_input: code });
+
+  btn.disabled = false;
+  btn.textContent = "Grant access";
+
+  if (error) {
+    document.getElementById("share-error").innerHTML = `<div class="error">${error.message}</div>`;
+    return;
+  }
+  if (!granted) {
+    document.getElementById("share-error").innerHTML =
+      '<div class="error">That invite code wasn\'t found. Check with that RTO.</div>';
+    return;
+  }
+
+  document.getElementById("share-invite-code").value = "";
+  document.getElementById("share-success").innerHTML = '<div class="success">Done — that RTO can now see your PD history.</div>';
+  loadSharedOrgs();
+}
+
 (async () => {
   const result = await requireAuth(null);
   if (!result) return;
   profileCtx = result;
   document.getElementById("org-label").textContent = result.profile.organizations?.name ?? "";
   document.getElementById("current-email").value = result.session.user.email ?? "";
+  if (result.profile.role === "trainer") {
+    document.getElementById("share-org-card").style.display = "block";
+    loadSharedOrgs();
+  }
 })();
 </script>
 </body>

@@ -101,17 +101,30 @@ let staffById = {};
 let currentEntries = [];
 
 async function loadStaff() {
-  const { data, error } = await db
+  const { data: homeStaff, error: homeError } = await db
     .from("profiles")
     .select("id, full_name")
-    .eq("org_id", profileCtx.profile.org_id)
-    .order("full_name");
-  if (error) return;
-  staffById = Object.fromEntries(data.map((s) => [s.id, s.full_name]));
+    .eq("org_id", profileCtx.profile.org_id);
+  if (homeError) return;
+
+  const { data: memberRows } = await db
+    .from("org_members")
+    .select("profiles(id, full_name)")
+    .eq("org_id", profileCtx.profile.org_id);
+
+  const combined = [...homeStaff];
+  (memberRows ?? []).forEach((row) => {
+    if (row.profiles && !combined.some((s) => s.id === row.profiles.id)) {
+      combined.push(row.profiles);
+    }
+  });
+  combined.sort((a, b) => a.full_name.localeCompare(b.full_name));
+
+  staffById = Object.fromEntries(combined.map((s) => [s.id, s.full_name]));
   const select = document.getElementById("filter-staff");
   select.innerHTML =
     '<option value="">All staff</option>' +
-    data.map((s) => `<option value="${s.id}">${escapeHtml(s.full_name)}</option>`).join("");
+    combined.map((s) => `<option value="${s.id}">${escapeHtml(s.full_name)}</option>`).join("");
 }
 
 function clearFilters() {
@@ -123,10 +136,12 @@ function clearFilters() {
 }
 
 async function loadEntries() {
+  // No org_id filter here — RLS on pd_entries already scopes results to this
+  // admin's home org plus any staff who've granted this org access via
+  // org_members, and that's a wider set than a simple org_id match would be.
   let query = db
     .from("pd_entries")
     .select("*")
-    .eq("org_id", profileCtx.profile.org_id)
     .order("created_at", { ascending: false });
 
   const staffFilter = document.getElementById("filter-staff").value;
