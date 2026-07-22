@@ -103,6 +103,13 @@
 
 </main>
 
+<div class="modal-overlay" id="entry-modal" style="display:none" onclick="closeEntryModalIfBackdrop(event)">
+  <div class="modal-box">
+    <button type="button" class="modal-close" onclick="closeEntryModal()">&times;</button>
+    <div id="entry-modal-body"></div>
+  </div>
+</div>
+
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 <script src="config.js"></script>
 <script src="common.js"></script>
@@ -313,17 +320,42 @@ async function loadRecentEntries() {
   container.innerHTML = data
     .map(
       (e) => `
-    <div class="entry-item">
+    <div class="entry-item" onclick="openEntryModal('${e.id}')">
       <div class="meta">
         <span class="badge ${e.entry_type}">${ENTRY_TYPES[e.entry_type].short}</span>
         <span class="date">${e.entry_date}</span>
       </div>
       ${e.title ? `<div class="title">${escapeHtml(e.title)}</div>` : ""}
       ${e.transcript ? `<div class="transcript">${escapeHtml(e.transcript)}</div>` : ""}
-      ${e.photo_url ? `<div style="margin-top:6px"><a href="${e.photo_url}" target="_blank">View photo</a></div>` : ""}
+      ${e.photo_url ? `<div class="hint" style="margin-top:6px">📷 Photo attached</div>` : ""}
     </div>`
     )
     .join("");
+}
+
+function openEntryModal(id) {
+  const e = myEntries.find((entry) => entry.id === id);
+  if (!e) return;
+
+  const parts = [
+    `<div class="meta"><span class="badge ${e.entry_type}">${ENTRY_TYPES[e.entry_type].short}</span><span class="date">${e.entry_date}</span></div>`,
+    e.title ? `<div class="title" style="margin-top:10px">${escapeHtml(e.title)}</div>` : "",
+    e.contact_name ? `<div style="margin-top:10px"><strong>Contact:</strong> ${escapeHtml(e.contact_name)}</div>` : "",
+    e.transcript ? `<div class="transcript" style="margin-top:10px">${escapeHtml(e.transcript)}</div>` : "",
+    `<p class="hint" style="margin-top:14px; margin-bottom:0">Submitted ${formatDateTime(e.created_at)}</p>`,
+    e.photo_url ? `<a href="${e.photo_url}" target="_blank"><img class="modal-photo" src="${e.photo_url}"></a>` : "",
+  ];
+
+  document.getElementById("entry-modal-body").innerHTML = parts.filter(Boolean).join("");
+  document.getElementById("entry-modal").style.display = "flex";
+}
+
+function closeEntryModal() {
+  document.getElementById("entry-modal").style.display = "none";
+}
+
+function closeEntryModalIfBackdrop(event) {
+  if (event.target.id === "entry-modal") closeEntryModal();
 }
 
 function exportMyCSV() {

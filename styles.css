@@ -179,12 +179,28 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--p
 .badge.vocational_pd { background: var(--accent-light); color: #8a4c0a; }
 .badge.industry_engagement { background: #e8e8fb; color: #4b3f9e; }
 
-.entry-item { border-bottom: 1px solid var(--border); padding: 14px 0; }
+.entry-item { border-bottom: 1px solid var(--border); padding: 14px 0; cursor: pointer; }
 .entry-item:last-child { border-bottom: none; }
 .entry-item .meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 4px; flex-wrap: wrap; }
 .entry-item .date { font-size: 12px; color: var(--text-light); }
 .entry-item .title { font-weight: 700; margin: 4px 0 2px; }
 .entry-item .transcript { font-size: 14px; color: var(--text); }
+
+.modal-overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.5);
+  display: flex; align-items: center; justify-content: center;
+  padding: 20px; z-index: 100;
+}
+.modal-box {
+  background: var(--card); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 24px; max-width: 480px; width: 100%; max-height: 85vh; overflow-y: auto;
+  position: relative;
+}
+.modal-close {
+  position: absolute; top: 14px; right: 14px; background: none; border: none;
+  font-size: 22px; cursor: pointer; color: var(--text-light); line-height: 1;
+}
+.modal-photo { width: 100%; border-radius: 10px; margin-top: 14px; display: block; }
 
 table { width: 100%; border-collapse: collapse; font-size: 14px; }
 th, td { text-align: left; padding: 10px 8px; border-bottom: 1px solid var(--border); vertical-align: top; }
